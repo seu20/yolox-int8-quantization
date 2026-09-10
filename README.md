@@ -3,6 +3,13 @@
 YOLOX-Tiny ONNX 모델을 INT8로 양자화하고, Raspberry Pi 4 CPU 환경에서 FP32와 INT8의 정확도와 추론 성능을 비교한 엣지 AI 경량화 프로젝트입니다.
 
 ---
+#### 영상
+
+
+https://github.com/user-attachments/assets/ef4f5c33-711a-4b84-a3af-007534641490
+
+
+---
 
 ## 1. 프로젝트 목표
 

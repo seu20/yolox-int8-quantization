@@ -1,8 +1,13 @@
-# YOLOX-Tiny INT8 Quantization on Raspberry Pi 4
+# Raspberry Pi 4 기반 YOLOX-Tiny INT8 양자화 및 성능 비교
 
 YOLOX-Tiny ONNX 모델을 INT8로 양자화하고, Raspberry Pi 4 CPU에서 FP32와 INT8의 정확도와 추론 성능을 비교한 엣지 AI 경량화 프로젝트입니다.
 
 ---
+### 데모영상
+
+https://github.com/user-attachments/assets/4d754589-ff28-45b8-8455-17764881d884
+
+
 
 ## 1. 프로젝트 목표
 

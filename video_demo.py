@@ -10,7 +10,6 @@ import onnxruntime as ort
 
 INPUT_SIZE = (416, 416)
 
-# COCO class ID 중 도로 주행과 관련된 클래스만 사용
 ROAD_CLASSES = {
     0: "person",
     1: "bicycle",
@@ -22,16 +21,15 @@ ROAD_CLASSES = {
     11: "stop sign",
 }
 
-# OpenCV는 BGR 순서
 CLASS_COLORS = {
-    0: (0, 255, 255),      # person
-    1: (255, 255, 0),      # bicycle
-    2: (0, 255, 0),        # car
-    3: (255, 0, 255),      # motorcycle
-    5: (255, 0, 0),        # bus
-    7: (0, 165, 255),      # truck
-    9: (0, 0, 255),        # traffic light
-    11: (128, 0, 255),     # stop sign
+    0: (0, 255, 255),
+    1: (255, 255, 0),
+    2: (0, 255, 0),
+    3: (255, 0, 255),
+    5: (255, 0, 0),
+    7: (0, 165, 255),
+    9: (0, 0, 255),
+    11: (128, 0, 255),
 }
 
 
@@ -157,30 +155,19 @@ def draw_detection(frame, det, width, height):
 
     cls_id = int(cls_id)
 
-    # 도로 관련 클래스가 아니면 표시하지 않음
     if cls_id not in ROAD_CLASSES:
         return
 
     x1 = int(max(0, x1))
     y1 = int(max(0, y1))
-
-    x2 = int(
-        min(width - 1, x2)
-    )
-
-    y2 = int(
-        min(height - 1, y2)
-    )
+    x2 = int(min(width - 1, x2))
+    y2 = int(min(height - 1, y2))
 
     class_name = ROAD_CLASSES[cls_id]
     color = CLASS_COLORS[cls_id]
 
-    label = (
-        f"{class_name} "
-        f"{score:.2f}"
-    )
+    label = f"{class_name} {score:.2f}"
 
-    # Bounding box
     cv2.rectangle(
         frame,
         (x1, y1),
@@ -189,8 +176,7 @@ def draw_detection(frame, det, width, height):
         2
     )
 
-    # 글자 크기 계산
-    (text_width, text_height), baseline = cv2.getTextSize(
+    (text_width, text_height), _ = cv2.getTextSize(
         label,
         cv2.FONT_HERSHEY_SIMPLEX,
         0.6,
@@ -202,7 +188,6 @@ def draw_detection(frame, det, width, height):
         text_height + 10
     )
 
-    # 라벨 배경
     cv2.rectangle(
         frame,
         (x1, label_y - text_height - 8),
@@ -211,7 +196,6 @@ def draw_detection(frame, det, width, height):
         -1
     )
 
-    # 라벨 글씨
     cv2.putText(
         frame,
         label,
@@ -228,8 +212,7 @@ def main():
 
     parser.add_argument(
         "--sequence",
-        required=True,
-        help="Directory containing sequential images"
+        required=True
     )
 
     parser.add_argument(
@@ -248,6 +231,12 @@ def main():
         default=10.0
     )
 
+    parser.add_argument(
+        "--label",
+        default="INT8",
+        help="Label displayed in the video, e.g. FP32 or INT8"
+    )
+
     args = parser.parse_args()
 
     images = get_images(args.sequence)
@@ -257,8 +246,9 @@ def main():
             f"No JPG/PNG images found: {args.sequence}"
         )
 
-    print(f"Images: {len(images)}")
-    print(f"Model: {args.model}")
+    print(f"Images : {len(images)}")
+    print(f"Model  : {args.model}")
+    print(f"Mode   : {args.label}")
 
     session = ort.InferenceSession(
         args.model,
@@ -267,9 +257,7 @@ def main():
 
     input_name = session.get_inputs()[0].name
 
-    first = cv2.imread(
-        str(images[0])
-    )
+    first = cv2.imread(str(images[0]))
 
     if first is None:
         raise RuntimeError(
@@ -277,6 +265,57 @@ def main():
         )
 
     height, width = first.shape[:2]
+
+    # -------------------------
+    # 1. Inference
+    # -------------------------
+
+    print()
+    print("Running inference...")
+
+    results = []
+    latencies = []
+
+    for i, path in enumerate(images, 1):
+
+        frame = cv2.imread(str(path))
+
+        if frame is None:
+            results.append(None)
+            continue
+
+        dets, latency = detect(
+            session,
+            input_name,
+            frame
+        )
+
+        results.append(dets)
+        latencies.append(latency)
+
+        if i % 100 == 0:
+            print(f"Inference: {i}/{len(images)}")
+
+    if not latencies:
+        raise RuntimeError(
+            "No frames were processed"
+        )
+
+    avg_latency = float(
+        np.mean(latencies)
+    )
+
+    avg_fps = (
+        1000.0 / avg_latency
+    )
+
+    print()
+    print(f"Avg Latency : {avg_latency:.2f} ms")
+    print(f"Avg FPS     : {avg_fps:.2f}")
+
+    # -------------------------
+    # 2. Video generation
+    # -------------------------
 
     writer = cv2.VideoWriter(
         args.output,
@@ -290,32 +329,22 @@ def main():
             "VideoWriter open failed"
         )
 
-    total_latency = 0.0
-    processed = 0
+    print()
+    print("Creating video...")
 
-    for i, path in enumerate(images, 1):
+    for i, (path, dets) in enumerate(
+        zip(images, results),
+        1
+    ):
 
-        frame = cv2.imread(
-            str(path)
-        )
+        frame = cv2.imread(str(path))
 
         if frame is None:
-            print(f"Skip: {path}")
             continue
-
-        dets, latency = detect(
-            session,
-            input_name,
-            frame
-        )
-
-        total_latency += latency
-        processed += 1
 
         if dets is not None:
 
             for det in dets:
-
                 draw_detection(
                     frame,
                     det,
@@ -323,16 +352,32 @@ def main():
                     height
                 )
 
-        infer_fps = 1000.0 / latency
+        # 모델 종류
+        cv2.putText(
+            frame,
+            f"YOLOX-Tiny {args.label}",
+            (20, 35),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (255, 255, 255),
+            2
+        )
+
+        # 전체 영상 평균 성능
+        cv2.putText(
+            frame,
+            f"Avg Latency: {avg_latency:.1f} ms",
+            (20, 67),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2
+        )
 
         cv2.putText(
             frame,
-            (
-                f"YOLOX-Tiny | "
-                f"{latency:.1f} ms | "
-                f"{infer_fps:.1f} FPS"
-            ),
-            (20, 35),
+            f"Avg FPS: {avg_fps:.2f}",
+            (20, 97),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.7,
             (255, 255, 255),
@@ -342,38 +387,16 @@ def main():
         writer.write(frame)
 
         if i % 100 == 0:
-            print(
-                f"{i}/{len(images)}"
-            )
+            print(f"Video: {i}/{len(images)}")
 
     writer.release()
 
-    if processed == 0:
-        raise RuntimeError(
-            "No frames were processed"
-        )
-
-    mean_latency = (
-        total_latency / processed
-    )
-
     print()
     print("Finished")
-    print(f"Frames: {processed}")
-
-    print(
-        f"Mean latency: "
-        f"{mean_latency:.2f} ms"
-    )
-
-    print(
-        f"Mean inference FPS: "
-        f"{1000.0 / mean_latency:.2f}"
-    )
-
-    print(
-        f"Saved: {args.output}"
-    )
+    print(f"Frames      : {len(latencies)}")
+    print(f"Avg Latency : {avg_latency:.2f} ms")
+    print(f"Avg FPS     : {avg_fps:.2f}")
+    print(f"Saved       : {args.output}")
 
 
 if __name__ == "__main__":

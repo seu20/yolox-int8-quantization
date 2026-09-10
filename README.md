@@ -30,6 +30,8 @@ Raspberry Pi 4 CPU 추론
 
 ## 2. 성능 비교
 
+![FP32 vs INT8 비교](docs/benchmark.png)
+
 COCO128을 사용해 FP32와 INT8 모델을 동일한 조건에서 평가했습니다.
 
 
